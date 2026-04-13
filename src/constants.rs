@@ -1,0 +1,1 @@
+pub const WELCOME_GENERAL : &'static str = "#general...\n \r> here you can join different rooms";
