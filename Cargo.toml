@@ -8,3 +8,4 @@ anyhow = "1.0.102"
 tokio = { version = "1.51.1", features = ["full"] }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
+dashmap = "6.1.0"
