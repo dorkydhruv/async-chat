@@ -10,10 +10,8 @@ use tokio::{
 };
 use tracing::{error, info};
 
-use crate::constants::WELCOME_GENERAL;
-use crate::state::{AppState, ChatEvent, LocalUserState};
-mod constants;
-mod state;
+use async_chat::constants::WELCOME_GENERAL;
+use async_chat::state::{AppState, ChatEvent, LocalUserState};
 
 enum Action {
     Join(String),
@@ -26,8 +24,9 @@ enum Action {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().init();
-    let tcp_lsnr = TcpListener::bind("127.0.0.1:8080").await?;
-    info!("the server started at 127.0.0.1:8080");
+    let bind_addr = std::env::var("CHAT_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
+    let tcp_lsnr = TcpListener::bind(&bind_addr).await?;
+    info!("the server started at {bind_addr}");
 
     let app_state_main = Arc::new(AppState::new());
     let _ = app_state_main.get_or_create_room("#general").await;
@@ -187,8 +186,7 @@ async fn handle_client(
             incoming = user_state.room_receiver.recv() => {
                 match incoming {
                     Ok(message) => {
-                        writer.write_all(message.render().as_bytes()).await?;
-                        writer.write_all(b"\n").await?;
+                        writer.write_all(message.as_ref()).await?;
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => {
                         app_state.record_lagged_receive();
@@ -319,8 +317,7 @@ async fn replay_room_history(
     writer: &mut OwnedWriteHalf,
 ) -> anyhow::Result<()> {
     for message in app_state.get_messages(room).await {
-        writer.write_all(message.render().as_bytes()).await?;
-        writer.write_all(b"\n").await?;
+        writer.write_all(message.as_ref()).await?;
     }
     Ok(())
 }

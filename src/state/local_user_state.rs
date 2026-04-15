@@ -1,18 +1,19 @@
 use std::sync::Arc;
 
+use bytes::Bytes;
 use tokio::sync::broadcast;
 
-use crate::state::{AppState, ChatEvent};
+use crate::state::AppState;
 pub struct LocalUserState {
     pub room: String,
     pub name: String,
-    pub room_receiver: broadcast::Receiver<Arc<ChatEvent>>,
+    pub room_receiver: broadcast::Receiver<Bytes>,
 }
 
 impl LocalUserState {
     pub fn new_with_addr(
         addr: core::net::SocketAddr,
-        room_receiver: broadcast::Receiver<Arc<ChatEvent>>,
+        room_receiver: broadcast::Receiver<Bytes>,
     ) -> Self {
         Self {
             room: "#general".to_string(),

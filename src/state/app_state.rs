@@ -1,5 +1,6 @@
 use std::{collections::VecDeque, sync::Arc};
 
+use bytes::Bytes;
 use dashmap::{DashMap, mapref::entry::Entry};
 use tokio::sync::{Mutex, broadcast};
 
@@ -10,8 +11,8 @@ const ROOM_HISTORY_LIMIT: usize = 20;
 const GENERAL_ROOM: &str = "#general";
 
 struct Room {
-    sender: broadcast::Sender<Arc<ChatEvent>>,
-    history: Mutex<VecDeque<Arc<ChatEvent>>>,
+    sender: broadcast::Sender<Bytes>,
+    history: Mutex<VecDeque<Bytes>>,
 }
 
 impl Room {
@@ -51,7 +52,7 @@ impl AppState {
         }
     }
 
-    async fn push_history(room: &Arc<Room>, event: Arc<ChatEvent>) {
+    async fn push_history(room: &Arc<Room>, event: Bytes) {
         let mut history = room.history.lock().await;
         history.push_back(event);
         while history.len() > ROOM_HISTORY_LIMIT {
@@ -59,11 +60,11 @@ impl AppState {
         }
     }
 
-    pub async fn get_or_create_room(&self, name: &str) -> broadcast::Sender<Arc<ChatEvent>> {
+    pub async fn get_or_create_room(&self, name: &str) -> broadcast::Sender<Bytes> {
         self.room_handle(name).sender.clone()
     }
 
-    pub async fn subscribe_room(&self, name: &str) -> broadcast::Receiver<Arc<ChatEvent>> {
+    pub async fn subscribe_room(&self, name: &str) -> broadcast::Receiver<Bytes> {
         self.room_handle(name).sender.subscribe()
     }
 
@@ -74,9 +75,9 @@ impl AppState {
     pub async fn publish(&self, room: &str, event: ChatEvent) {
         self.metrics.inc_publish();
         let room_state = self.room_handle(room);
-        let event = Arc::new(event);
-        Self::push_history(&room_state, event.clone()).await;
-        if room_state.sender.send(event).is_err() {
+        let wire = event.to_wire_message();
+        Self::push_history(&room_state, wire.clone()).await;
+        if room_state.sender.send(wire).is_err() {
             self.metrics.inc_publish_send_error();
         }
     }
@@ -87,17 +88,17 @@ impl AppState {
             .iter()
             .map(|entry| entry.value().clone())
             .collect();
-        let event = Arc::new(event);
+        let wire = event.to_wire_message();
         for room in rooms {
             self.metrics.inc_publish();
-            Self::push_history(&room, event.clone()).await;
-            if room.sender.send(event.clone()).is_err() {
+            Self::push_history(&room, wire.clone()).await;
+            if room.sender.send(wire.clone()).is_err() {
                 self.metrics.inc_publish_send_error();
             }
         }
     }
 
-    pub async fn get_messages(&self, room: &str) -> Vec<Arc<ChatEvent>> {
+    pub async fn get_messages(&self, room: &str) -> Vec<Bytes> {
         self.metrics.inc_replay_request();
         let room = self.rooms.get(room).map(|entry| entry.value().clone());
         let Some(room) = room else {
